@@ -20,14 +20,14 @@ Attribute VB_Name = "FuncTools"
 ' Эта реализация настолько близка к пайплайнингу bash или Haskell,
 ' насколько это возможно
 ' ВНИМАНИЕ: Это НЕ функциональное программирование, но это лучше, чем ничего
-Function apply(array_function_names() As Variant, input_data As Variant) As Variant
-Dim N As Integer
+Function apply(input_data As Variant, ParamArray array_function_names() As Variant) As Variant
+Dim n As Integer
 Dim function_name As Variant
     apply = input_data
-    For N = LBound(array_function_names) To UBound(array_function_names)   'reduce
-        function_name = array_function_names(N)
+    For n = LBound(array_function_names) To UBound(array_function_names)   'reduce
+        function_name = array_function_names(n)
         apply = Application.Run(function_name, apply)
-    Next N
+    Next n
 End Function
 
 '*EN*
@@ -37,7 +37,7 @@ End Function
 ' Python имеет встроенную функцию all
 ' Она проходит по всем условиям и возвращает False, как
 ' только встретит 1й False
-Public Function all(conditions() As Variant) As Boolean
+Public Function all(ParamArray conditions() As Variant) As Boolean
 Dim i As Integer
     all = True
     For i = LBound(conditions) To UBound(conditions)
@@ -54,7 +54,7 @@ End Function
 '*RU*
 ' Аналог функции any в Python. Возвращает False только если
 ' во входном массиве не было обнаружено ни одного True
-Public Function anyone(conditions() As Variant) As Boolean
+Public Function anyone(ParamArray conditions() As Variant) As Boolean
 Dim i As Integer
     anyof = False
     For i = LBound(conditions) To UBound(conditions)
