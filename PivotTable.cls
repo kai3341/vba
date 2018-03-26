@@ -36,7 +36,7 @@ Public Function hasDimension(DimensionName) As Boolean
 hasDimension = Dimensions.Exists(DimensionName)
 End Function
 
-Public Function hasMember(DimensionName, MemberId) As Boolean
+Public Function hasMember(DimensionName, MemberID) As Boolean
 
 If Not Dimensions.Exists(DimensionName) Then
     Err.Raise _
@@ -46,7 +46,7 @@ If Not Dimensions.Exists(DimensionName) Then
             "Maybe this Intersection already done."
 End If
 
-hasMember = Dimensions.Item(DimensionName).Exists(MemberId)
+hasMember = Dimensions.Item(DimensionName).Exists(MemberID)
 End Function
 
 Public Sub MakeAggregate()
@@ -60,7 +60,7 @@ End Function
 
 Public Sub Add( _
     DimensionName As Variant, _
-    MemberId As Variant, _
+    MemberID As Variant, _
     ItemRange As Range _
 )
 Dim ThisDimension As Object
@@ -79,9 +79,9 @@ Else
         Item:=ThisDimension
 End If
 
-If ThisDimension.Exists(MemberId) Then
-    Set ThisRange = ThisDimension.Item(MemberId)
-    ThisDimension.Remove (MemberId)
+If ThisDimension.Exists(MemberID) Then
+    Set ThisRange = ThisDimension.Item(MemberID)
+    ThisDimension.Remove (MemberID)
     Set ThisRange = Application.Union( _
         ThisRange, _
         ItemRange _
@@ -91,7 +91,7 @@ Else
 End If
 
 ThisDimension.Add _
-    key:=MemberId, _
+    key:=MemberID, _
     Item:=ThisRange
 
 End Sub
@@ -111,7 +111,7 @@ End Property
 
 Public Property Get Value( _
     DimensionName As Variant, _
-    MemberId As Variant _
+    MemberID As Variant _
 ) As Variant
 
 Dim ThisDimension As Object
@@ -125,16 +125,16 @@ End If
 
 Set ThisDimension = Dimensions.Item(DimensionName)
 
-If Not ThisDimension.Exists(MemberId) Then
+If Not ThisDimension.Exists(MemberID) Then
     Err.Raise _
         Number:=12345, _
         Description:="Dimension """ & DimensionName & """ does not contains" & _
             Chr(13) & Chr(10) & _
-            "Member ID = """ & MemberId & """ in this PivotTable."
+            "Member ID = """ & MemberID & """ in this PivotTable."
 
 End If
 
-Set MemberCell = ThisDimension.Item(MemberId)
+Set MemberCell = ThisDimension.Item(MemberID)
 
 'MemberCell.Select
 
@@ -150,7 +150,7 @@ End Property
 
 Public Property Let Value( _
     DimensionName As Variant, _
-    MemberId As Variant, _
+    MemberID As Variant, _
     NewVal As Variant _
 )
 
@@ -175,16 +175,16 @@ End If
 
 Set ThisDimension = Dimensions.Item(DimensionName)
 
-If Not ThisDimension.Exists(MemberId) Then
+If Not ThisDimension.Exists(MemberID) Then
     Err.Raise _
         Number:=12345, _
         Description:="Dimension """ & DimensionName & """ does not contains" & _
             Chr(13) & Chr(10) & _
-            "Member ID = """ & MemberId & """ in this PivotTable."
+            "Member ID = """ & MemberID & """ in this PivotTable."
 
 End If
 
-Set MemberCell = ThisDimension.Item(MemberId)
+Set MemberCell = ThisDimension.Item(MemberID)
 
 MemberCell.Value = NewVal
 
@@ -232,7 +232,7 @@ End Property
 
 Public Function IntersectOne( _
     DimensionName As Variant, _
-    MemberId As Variant _
+    MemberID As Variant _
 ) As PivotTable
 
 Dim ThisDimension As Object
@@ -254,18 +254,18 @@ End If
 
 Set ThisDimension = Dimensions.Item(DimensionName)
 
-If Not ThisDimension.Exists(MemberId) Then
+If Not ThisDimension.Exists(MemberID) Then
     'Maybe we shall return empty PivotTable if member not found
     'Anyway, it's not regular case: something gone wrong
     Err.Raise _
         Number:=12345, _
         Description:="Dimension """ & DimensionName & """ does not contains" & _
             Chr(13) & Chr(10) & _
-            "Member ID = """ & MemberId & """ in this PivotTable."
+            "Member ID = """ & MemberID & """ in this PivotTable."
 
 End If
 
-Set IntersectionRange = ThisDimension.Item(MemberId)
+Set IntersectionRange = ThisDimension.Item(MemberID)
 
 Set IntersectOne = New PivotTable
 
@@ -288,7 +288,7 @@ For Each ThisDimensionName In Dimensions.Keys
         If Not NewRange Is Nothing Then
             IntersectOne.Add _
                 DimensionName:=ThisDimensionName, _
-                MemberId:=ThisMemberId, _
+                MemberID:=ThisMemberId, _
                 ItemRange:=NewRange
         End If
     Next
@@ -304,16 +304,16 @@ End Function
 
 Public Function UnionRange() As Range
 Dim DimensionName As Variant
-Dim MemberId As Variant
+Dim MemberID As Variant
 Dim ThisMember As Range
 Dim ThisDimension As Object
 
 For Each DimensionName In Dimensions.Keys
 
     Set ThisDimension = Dimensions.Item(DimensionName)
-    For Each MemberId In ThisDimension.Keys
+    For Each MemberID In ThisDimension.Keys
 
-        Set ThisMember = ThisDimension.Item(MemberId)
+        Set ThisMember = ThisDimension.Item(MemberID)
         If UnionRange Is Nothing Then
             Set UnionRange = ThisMember
         Else
@@ -332,7 +332,7 @@ Public Function AggregateDimensions( _
 
 Dim MyDimensionName As Variant
 Dim AggregateDimensionName As Variant
-Dim MemberId As Variant
+Dim MemberID As Variant
 
 Dim MyDimension As Object
 Dim MemberRange As Range
@@ -348,12 +348,12 @@ For Each MyDimensionName In Dimensions.Keys
 
     Set MyDimension = Dimensions.Item(MyDimensionName)
 
-    For Each MemberId In MyDimension.Keys
-        Set MemberRange = MyDimension.Item(MemberId)
+    For Each MemberID In MyDimension.Keys
+        Set MemberRange = MyDimension.Item(MemberID)
 
         AggregateDimensions.Add _
             DimensionName:=MyDimensionName, _
-            MemberId:=MemberId, _
+            MemberID:=MemberID, _
             ItemRange:=MemberRange
     Next
 NextMyDimensionName:
@@ -454,7 +454,7 @@ For Each FilterMemberId In FilterMemberIds
 
     FilterEquals.Add _
         DimensionName:=MyDimensionName, _
-        MemberId:=FilterMemberId, _
+        MemberID:=FilterMemberId, _
         ItemRange:=MemberRange
 Next
 
@@ -475,7 +475,7 @@ For Each MyDimensionName In Dimensions.Keys
 
         FilterEquals.Add _
             DimensionName:=MyDimensionName, _
-            MemberId:=MyMemberId, _
+            MemberID:=MyMemberId, _
             ItemRange:=MemberRange
     Next
 NextMyDimensionName:
@@ -512,7 +512,7 @@ For Each MyDimensionName In Dimensions.Keys
     
             FilterEquals.Add _
                 DimensionName:=MyDimensionName, _
-                MemberId:=MyMemberId, _
+                MemberID:=MyMemberId, _
                 ItemRange:=MemberRange
 NextMemberId:
         Next
@@ -522,7 +522,7 @@ NextMemberId:
     
             FilterEquals.Add _
                 DimensionName:=MyDimensionName, _
-                MemberId:=MyMemberId, _
+                MemberID:=MyMemberId, _
                 ItemRange:=MemberRange
         Next
     End If
@@ -545,7 +545,7 @@ End Sub
 Private Function RealIntersection(Pairs() As Variant) As PivotTable
 Dim i As Integer
 Dim Dimension As Variant
-Dim MemberId As Variant
+Dim MemberID As Variant
 
 Set RealIntersection = Me
 
@@ -561,8 +561,8 @@ End If
 
 For i = LBound(Pairs) To UBound(Pairs) Step 2
     Dimension = Pairs(i)
-    MemberId = Pairs(i + 1)
-    Set RealIntersection = RealIntersection.IntersectOne(Dimension, MemberId)
+    MemberID = Pairs(i + 1)
+    Set RealIntersection = RealIntersection.IntersectOne(Dimension, MemberID)
 Next i
 
 End Function
