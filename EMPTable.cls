@@ -2,7 +2,7 @@ VERSION 1.0 CLASS
 BEGIN
   MultiUse = -1  'True
 END
-Attribute VB_Name = "EMPTable"
+Attribute VB_Name = "EPMTable"
 Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
@@ -28,19 +28,6 @@ Private DataRectangle As TRectangle
 
 Private FormulaCount As TCell
 
-Private Type TEPMOlapMemberO
-    'MemberType As TEPMMemberType
-    Valid As Boolean
-    DimestionName As String
-    MemberId As String
-End Type
-
-Private Enum TEPMMemberType
-    EMPOlap = 0
-    EPMLocal = 1
-    EPMBlank = 2
-End Enum
-
 Private Type TCell
     Row As Integer
     Col As Integer
@@ -51,6 +38,221 @@ Private Type TRectangle
     End As TCell
 End Type
 
+'==================== PUBLIC METHODS ====================
+
+Public Sub SetEPMOLAPMemberParser( _
+    Optional DimensionName As Variant = ".*", _
+    Optional HierarchyName As Variant = ".*", _
+    Optional MemberID As Variant = ".*", _
+    Optional ConnectionName As Variant = ".*", _
+    Optional Description1 As Variant = ".*", _
+    Optional Description2 As Variant = ".*", _
+    Optional TableID As Variant = ".*" _
+)
+
+Dim EPMRegEx As New RegExp
+
+EPMRegEx.Pattern = "EPMOlapMember[OC]\(""\[(" & _
+        DimensionName & ")\]\.\[(" & _
+        HierarchyName & ")\]\.\[(" & _
+        MemberID & ")\]""[;,]""(" & _
+        ConnectionName & ")""[;,]""(" & _
+        Description1 & ")""[;,]""(" & _
+        Description2 & ")""[;,]""(" & _
+        TableID & ")""\)\)"
+
+EPMRegEx.IgnoreCase = False
+
+If EPMMemberOParser.Exists("Olap") Then
+    EPMMemberOParser.Remove "Olap"
+End If
+
+EPMMemberOParser.Add _
+    key:="Olap", _
+    Item:=EPMRegEx
+
+End Sub
+
+Public Function FormulaRange() As Range
+Dim Head As Range
+Dim Left As Range
+Dim TopLeftCell As Range
+Dim BottomRightCell As Range
+
+Set TopLeftCell = Sheet.Cells( _
+    DataRectangle.Start.Row - FormulaCount.Row - 1, _
+    DataRectangle.Start.Col _
+)
+
+Set BottomRightCell = Sheet.Cells( _
+    DataRectangle.Start.Row - 1, _
+    DataRectangle.End.Col _
+)
+
+Set Head = Range(TopLeftCell, BottomRightCell)
+
+Set TopLeftCell = Sheet.Cells( _
+    DataRectangle.Start.Row, _
+    DataRectangle.Start.Col - FormulaCount.Col - 1 _
+)
+
+Set BottomRightCell = Sheet.Cells( _
+    DataRectangle.End.Row, _
+    DataRectangle.Start.Col - 1 _
+)
+
+Set Left = Range(TopLeftCell, BottomRightCell)
+
+Set FormulaRange = Application.Union(Head, Left)
+End Function
+
+Public Property Let FirstDataCell(FirstDataCell As Range)
+Dim LastCell As Range
+
+Set Sheet = FirstDataCell.Worksheet
+Set LastCell = Sheet.Cells.SpecialCells(xlLastCell)
+
+DataRectangle.Start.Row = FirstDataCell.Row
+DataRectangle.Start.Col = FirstDataCell.column
+Call CalcPivotTableLength(LastCell)
+CalcOLAPFormulaInner
+End Property
+
+Public Property Get FirstDataCell() As Range
+Set FirstDataCell = Sheet.Cells( _
+    DataRectangle.Start.Row, _
+    DataRectangle.Start.Col _
+)
+End Property
+
+Public Property Let InnerDataRange(DataRange As Range)
+'FIXME: Maybe works INCORRECTLY!
+Dim LastCell As Range
+
+Set Sheet = DataRange.Worksheet
+Set LastCell = DataRange.SpecialCells(xlLastCell)
+
+DataRectangle.Start.Row = DataRange.Cells(1, 1).Row
+DataRectangle.Start.Col = DataRange.Cells(1, 1).column
+DataRectangle.End.Row = LastCell.Row
+DataRectangle.End.Col = LastCell.column
+
+CalcOLAPFormulaInner
+End Property
+
+Public Property Get InnerDataRange() As Range
+Dim TopLeftCell As Range
+Dim BottomRightCell As Range
+
+Set TopLeftCell = Sheet.Cells( _
+    DataRectangle.Start.Row, _
+    DataRectangle.Start.Col _
+)
+
+Set BottomRightCell = Sheet.Cells( _
+    DataRectangle.End.Row, _
+    DataRectangle.End.Col _
+)
+
+Set InnerDataRange = Range(TopLeftCell, BottomRightCell)
+End Property
+
+Public Property Let OuterTableRange(TableRange As Range)
+'FIXME: Works ugly.
+
+Dim LastCell As Range
+
+Dim RangeAddress As String
+Dim Matches As Object
+
+Dim StartRangeCell As TCell
+Dim EndRangeCell As TCell
+
+Set Sheet = TableRange.Worksheet
+
+RangeAddress = TableRange.Address(ReferenceStyle:=xlR1C1)
+
+Set Matches = R1C1RegEx.Execute(RangeAddress)
+
+If Matches.Count <> 1 Then
+    Err.Raise _
+        Number:=12345, _
+        Description:="Range Address """ & RangeAddress & """ looks invalid"
+End If
+
+Set Matches = Matches.Item(0).SubMatches
+
+If Matches.Count <> 4 Then
+    Err.Raise _
+        Number:=12345, _
+        Description:="Range Address """ & RangeAddress & """ looks invalid"
+End If
+
+StartRangeCell.Row = Matches.Item(0)
+StartRangeCell.Col = Matches.Item(1)
+
+DataRectangle.End.Row = Matches.Item(2)
+DataRectangle.End.Col = Matches.Item(3)
+
+Set LastCell = Sheet.Cells( _
+    DataRectangle.End.Row, _
+    DataRectangle.End.Col _
+)
+
+Call CalcOLAPFormulaOuter(TableRange.Cells(1, 1), LastCell)
+End Property
+
+Public Property Get OuterDataRange() As Range
+Dim TopLeftCell As Range
+Dim BottomRightCell As Range
+
+Set TopLeftCell = Sheet.Cells( _
+    DataRectangle.Start.Row - FormulaCount.Row, _
+    DataRectangle.Start.Col - FormulaCount.Col _
+)
+
+Set BottomRightCell = Sheet.Cells( _
+    DataRectangle.End.Row, _
+    DataRectangle.End.Col _
+)
+
+Set InnerDataRange = Range(TopLeftCell, BottomRightCell)
+End Property
+
+Public Property Get PivotTable() As PivotTable
+Set TargetTable = New PivotTable
+ScanTable
+Set PivotTable = TargetTable
+End Property
+
+Public Function ParseEPMOlapFormula(line As String) As Object
+Dim Matches As Object
+Dim MatchItems As Object
+
+Set Matches = EPMMemberOParser("Olap").Execute(line)
+
+If Matches.Count = 0 Then
+    Exit Function
+End If
+
+Set ParseEPMOlapFormula = Matches.Item(0).SubMatches
+End Function
+
+Public Function isValidEPMFormula(line As String) As Boolean
+Dim key As Variant
+Dim CurrentRegEx As RegExp
+
+For Each key In EPMMemberOParser.Keys
+    Set CurrentRegEx = EPMMemberOParser(key)
+    isValidEPMFormula = CurrentRegEx.Test(line)
+    If isValidEPMFormula Then
+        Exit Function
+    End If
+Next
+End Function
+
+'==================== PRIVATE METHODS ===================
+
 Private Sub Class_Initialize()
 Dim EPMRegEx As RegExp
 Dim Patterns As Scripting.Dictionary
@@ -59,12 +261,8 @@ Dim PatternName As Variant
 Set EPMMemberOParser = New Scripting.Dictionary
 Set Patterns = New Scripting.Dictionary
 
-
-'Patterns.Add key:="Olap", Item:="EPMOlapMemberO\(""\[([\w\.]+)\]\.\[([\w\.]*)\]\.\[([\w\.]+)\]"";"".*"";"".*"";(\d{3})"
-Patterns.Add key:="Olap", Item:="EPMOlapMemberO\(""\[([\w\.]+)\]\.\[([\w\.]*)\]\.\[([\w\.]+)\]"
 Patterns.Add key:="Local", Item:="EPMLocalMember(O){0,1}\("""
 Patterns.Add key:="Blank", Item:="EPMOlapMemberO\(""\[Blank Member\]"""
-
 
 For Each PatternName In Patterns.Keys
     Set EPMRegEx = New RegExp
@@ -76,6 +274,8 @@ For Each PatternName In Patterns.Keys
         Item:=EPMRegEx
 Next
 
+SetEPMOLAPMemberParser
+
 Set R1C1RegEx = New RegExp
 R1C1RegEx.Pattern = "R(\d+)C(\d+):R(\d+)C(\d+)"
 
@@ -86,45 +286,8 @@ Private Sub Class_Terminate()
     Set Sheet = Nothing
 End Sub
 
-Public Property Get TableID() As Variant
-TableID = EPMTableId
-End Property
-
-Public Property Let TableID(TableID As Variant)
-Dim EPMRegEx As New RegExp
-Dim PatternName As Variant
-
-PatternName = "Olap"
-
-EPMTableId = TableID
-
-EPMRegEx.Pattern = "EPMOlapMemberO\(""\[([\w\.]+)\]\.\[([\w\.]*)\]\.\[" & TableID & "\]"""
-
-Debug.Print EPMRegEx.Pattern
-
-EPMRegEx.IgnoreCase = False
-
-EPMMemberOParser.Remove PatternName
-
-EPMMemberOParser.Add _
-    key:=PatternName, _
-    Item:=EPMRegEx
-End Property
-
-Private Function isValidEPMFormula(line As String) As Boolean
-Dim key As Variant
-Dim AllMatches As Object
-Dim CurrentRegEx As RegExp
-
-For Each key In EPMMemberOParser.Keys
-    Set CurrentRegEx = EPMMemberOParser(key)
-    Set AllMatches = CurrentRegEx.Execute(line)
-    isValidEPMFormula = (AllMatches.Count > 0)
-    If isValidEPMFormula Then
-        Exit Function
-    End If
-Next
-End Function
+'==== Здесь и далее идут костыли ====
+'==== Перепишу, как совсем допечет. Работает -- и ладно :)
 
 Private Function ScanTableByCols() As Integer
 Dim _
@@ -134,7 +297,7 @@ Dim _
 As Integer
 Dim ThisRange As Range
 Dim ThisFormulaCell As Range
-Dim EPMOlapMember As TEPMOlapMemberO
+Dim EPMOlapMember As Object
 
 StartFormulaRow = DataRectangle.Start.Row - 1
 EndFormulaRow = DataRectangle.Start.Row - FormulaCount.Row
@@ -148,11 +311,11 @@ For ScanTableByCols = DataRectangle.Start.Col To DataRectangle.End.Col
     For FormulaRow = StartFormulaRow To EndFormulaRow Step -1
         Set ThisFormulaCell = Sheet.Cells(FormulaRow, ScanTableByCols)
         
-        EPMOlapMember = EPMOlapFormula(ThisFormulaCell.formula)
-        If EPMOlapMember.Valid Then
+        Set EPMOlapMember = ParseEPMOlapFormula(ThisFormulaCell.formula)
+        If Not EPMOlapMember Is Nothing Then
             TargetTable.Add _
-                DimensionName:=EPMOlapMember.DimestionName, _
-                MemberId:=EPMOlapMember.MemberId, _
+                DimensionName:=EPMOlapMember.Item(0), _
+                MemberID:=EPMOlapMember.Item(2), _
                 ItemRange:=ThisRange
         End If
     Next FormulaRow
@@ -169,7 +332,7 @@ Dim _
 As Integer
 Dim ThisRange As Range
 Dim ThisFormulaCell As Range
-Dim EPMOlapMember As TEPMOlapMemberO
+Dim EPMOlapMember As Object
 
 StartFormulaCol = DataRectangle.Start.Col - 1
 EndFormulaCol = DataRectangle.Start.Col - FormulaCount.Col
@@ -183,11 +346,11 @@ For ScanTableByRows = DataRectangle.Start.Row To DataRectangle.End.Row
     For FormulaCol = StartFormulaCol To EndFormulaCol Step -1
         Set ThisFormulaCell = Sheet.Cells(ScanTableByRows, FormulaCol)
         
-        EPMOlapMember = EPMOlapFormula(ThisFormulaCell.formula)
-        If EPMOlapMember.Valid Then
+        Set EPMOlapMember = ParseEPMOlapFormula(ThisFormulaCell.formula)
+        If Not EPMOlapMember Is Nothing Then
             TargetTable.Add _
-                DimensionName:=EPMOlapMember.DimestionName, _
-                MemberId:=EPMOlapMember.MemberId, _
+                DimensionName:=EPMOlapMember.Item(0), _
+                MemberID:=EPMOlapMember.Item(2), _
                 ItemRange:=ThisRange
         End If
     Next FormulaCol
@@ -378,120 +541,3 @@ Private Sub CalcPivotTableLength(LastCell As Range)
 Call CalcPivotTableLengthRight(LastCell)
 Call CalcPivotTableLengthBottom(LastCell)
 End Sub
-
-Private Function EPMOlapFormula(line As String) As TEPMOlapMemberO
-Dim Matches As Object
-Dim MatchItems As Object
-
-Set Matches = EPMMemberOParser("Olap").Execute(line)
-
-EPMOlapFormula.Valid = (Matches.Count > 0)
-
-If Not EPMOlapFormula.Valid Then
-    Exit Function
-End If
-
-Set MatchItems = Matches.Item(0).SubMatches
-
-EPMOlapFormula.Valid = (MatchItems.Count > 2)
-
-If Not EPMOlapFormula.Valid Then
-    Exit Function
-End If
-
-EPMOlapFormula.DimestionName = MatchItems.Item(0)
-EPMOlapFormula.MemberId = MatchItems.Item(MatchItems.Count - 1)
-End Function
-
-Public Function fromFirstDataCell(FirstDataCell As Range) As PivotTable
-Dim LastCell As Range
-
-Set Sheet = FirstDataCell.Worksheet
-Set LastCell = Sheet.Cells.SpecialCells(xlLastCell)
-Set TargetTable = New PivotTable
-
-DataRectangle.Start.Row = FirstDataCell.Row
-DataRectangle.Start.Col = FirstDataCell.column
-Call CalcPivotTableLength(LastCell)
-CalcOLAPFormulaInner
-
-ScanTable
-
-Set fromFirstDataCell = TargetTable
-
-End Function
-
-Public Function fromInnerDataRange(DataRange As Range) As PivotTable
-'FIXME: Maybe works INCORRECTLY!
-Dim LastCell As Range
-
-Set Sheet = DataRange.Worksheet
-Set LastCell = DataRange.SpecialCells(xlLastCell)
-Set TargetTable = New PivotTable
-
-DataRectangle.Start.Row = DataRange.Cells(1, 1).Row
-DataRectangle.Start.Col = DataRange.Cells(1, 1).column
-DataRectangle.End.Row = LastCell.Row
-DataRectangle.End.Col = LastCell.column
-
-CalcOLAPFormulaInner
-
-ScanTable
-
-Set fromInnerDataRange = TargetTable
-
-End Function
-
-Public Function fromOuterTableRange(TableRange As Range) As PivotTable
-'FIXME: Works ugly.
-
-Dim LastCell As Range
-
-Dim RangeAddress As String
-Dim Matches As Object
-
-Dim StartRangeCell As TCell
-Dim EndRangeCell As TCell
-
-Set Sheet = TableRange.Worksheet
-
-Set TargetTable = New PivotTable
-
-RangeAddress = TableRange.Address(ReferenceStyle:=xlR1C1)
-
-Set Matches = R1C1RegEx.Execute(RangeAddress)
-
-If Matches.Count <> 1 Then
-    Err.Raise _
-        Number:=12345, _
-        Description:="Range Address """ & RangeAddress & """ looks invalid"
-End If
-
-Set Matches = Matches.Item(0).SubMatches
-
-If Matches.Count <> 4 Then
-    Err.Raise _
-        Number:=12345, _
-        Description:="Range Address """ & RangeAddress & """ looks invalid"
-End If
-
-StartRangeCell.Row = Matches.Item(0)
-StartRangeCell.Col = Matches.Item(1)
-
-DataRectangle.End.Row = Matches.Item(2)
-DataRectangle.End.Col = Matches.Item(3)
-
-Set LastCell = Sheet.Cells( _
-    DataRectangle.End.Row, _
-    DataRectangle.End.Col _
-)
-
-Call CalcOLAPFormulaOuter(TableRange.Cells(1, 1), LastCell)
-ScanTable
-
-Set fromOuterTableRange = TargetTable
-
-End Function
-
-'Public Function fromAnalyzerDynReport(AnalyzerDynReport As Object) As PivotTable
-'End Function
