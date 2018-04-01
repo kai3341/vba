@@ -14,11 +14,7 @@ Attribute VB_Exposed = False
 
 Option Explicit
 
-Private TargetTable As PivotTable
-
 Private Sheet As Worksheet
-
-Private EPMTableId As Variant
 
 Private EPMMemberOParser As Scripting.Dictionary
 
@@ -26,7 +22,8 @@ Private R1C1RegEx As RegExp
 
 Private DataRectangle As TRectangle
 
-Private FormulaCount As TCell
+Private FormulaRectangleHead As TRectangle
+Private FormulaRectangleLeft As TRectangle
 
 Private Type TCell
     Row As Integer
@@ -34,13 +31,13 @@ Private Type TCell
 End Type
 
 Private Type TRectangle
-    Start As TCell
-    End As TCell
+    TopLeft As TCell
+    BottomRight As TCell
 End Type
 
 '==================== PUBLIC METHODS ====================
 
-Public Sub SetEPMOLAPMemberParser( _
+Public Sub ConfigureEPMOLAPMember( _
     Optional DimensionName As Variant = ".*", _
     Optional HierarchyName As Variant = ".*", _
     Optional MemberID As Variant = ".*", _
@@ -52,14 +49,14 @@ Public Sub SetEPMOLAPMemberParser( _
 
 Dim EPMRegEx As New RegExp
 
-EPMRegEx.Pattern = "EPMOlapMember[OC]\(""\[(" & _
-        DimensionName & ")\]\.\[(" & _
-        HierarchyName & ")\]\.\[(" & _
-        MemberID & ")\]""[;,]""(" & _
-        ConnectionName & ")""[;,]""(" & _
-        Description1 & ")""[;,]""(" & _
-        Description2 & ")""[;,]""(" & _
-        TableID & ")""\)\)"
+EPMRegEx.Pattern = "EPMOlapMember[OC]?\(""\[(" & _
+    DimensionName & ")\]\.\[(" & _
+    HierarchyName & ")\]\.\[(" & _
+    MemberID & ")\]""[;,]""(" & _
+    ConnectionName & ")""[;,]""(" & _
+    Description1 & ")""[;,]""(" & _
+    Description2 & ")""[;,]""(" & _
+    TableID & ")""\)"
 
 EPMRegEx.IgnoreCase = False
 
@@ -68,155 +65,270 @@ If EPMMemberOParser.Exists("Olap") Then
 End If
 
 EPMMemberOParser.Add _
-    key:="Olap", _
+    Key:="Olap", _
     Item:=EPMRegEx
 
 End Sub
 
-Public Function FormulaRange() As Range
-Dim Head As Range
-Dim Left As Range
-Dim TopLeftCell As Range
+Public Sub ConfigureEPMLocalMember( _
+    Optional Description As Variant = ".*", _
+    Optional MemberID As Variant = ".*", _
+    Optional TableID As Variant = ".*" _
+)
+Dim EPMRegEx As New RegExp
+
+EPMRegEx.Pattern = "EPMLocalMember[OC]?\(""(" & _
+    Description & ")""[;,]""(" & _
+    MemberID & ")""[;,]""(" & _
+    TableID & ")""\)"
+
+EPMRegEx.IgnoreCase = False
+
+If EPMMemberOParser.Exists("Local") Then
+    EPMMemberOParser.Remove "Local"
+End If
+
+EPMMemberOParser.Add _
+    Key:="Local", _
+    Item:=EPMRegEx
+End Sub
+
+Public Sub ConfigureEPMBlankMember( _
+    Optional ConnectionName As Variant = ".*", _
+    Optional Description1 As Variant = ".*", _
+    Optional Description2 As Variant = ".*", _
+    Optional TableID As Variant = ".*" _
+)
+Dim EPMRegEx As New RegExp
+
+EPMRegEx.Pattern = "EPMOlapMember[OC]?\(""\[Blank Member\]""[;,]""(" & _
+    ConnectionName & ")""[;,]""(" & _
+    Description1 & ")""[;,]""(" & _
+    Description2 & ")""[;,]""(" & _
+    TableID & ")""\)"
+
+EPMRegEx.IgnoreCase = False
+
+If EPMMemberOParser.Exists("Blank") Then
+    EPMMemberOParser.Remove "Blank"
+End If
+
+EPMMemberOParser.Add _
+    Key:="Blank", _
+    Item:=EPMRegEx
+End Sub
+
+Public Property Get FormulaRangeHead() As Range
+Set FormulaRangeHead = Rectangle2Area(FormulaRectangleHead)
+End Property
+
+'Public Property Let FormulaRangeHead(NewVal As Range)
+'FormulaRectangleHead = Area2Rectangle(NewVal)
+'End Property
+
+Public Property Get FormulaRangeLeft() As Range
+Set FormulaRangeLeft = Rectangle2Area(FormulaRectangleLeft)
+End Property
+
+'Public Property Let FormulaRangeLeft(NewVal As Range)
+'FormulaRectangleLeft = Area2Rectangle(NewVal)
+'End Property
+
+Public Property Let TopLeftDataCell(ByVal TheCell As Range)
+Dim Row, Col As Integer
 Dim BottomRightCell As Range
 
-Set TopLeftCell = Sheet.Cells( _
-    DataRectangle.Start.Row - FormulaCount.Row - 1, _
-    DataRectangle.Start.Col _
-)
+Set Sheet = TheCell.Worksheet
 
-Set BottomRightCell = Sheet.Cells( _
-    DataRectangle.Start.Row - 1, _
-    DataRectangle.End.Col _
-)
+DataRectangle.TopLeft.Row = TheCell.Row
+DataRectangle.TopLeft.Col = TheCell.column
 
-Set Head = Range(TopLeftCell, BottomRightCell)
+FormulaRectangleHead.TopLeft.Col = TheCell.column
+FormulaRectangleLeft.TopLeft.Row = TheCell.Row
 
-Set TopLeftCell = Sheet.Cells( _
-    DataRectangle.Start.Row, _
-    DataRectangle.Start.Col - FormulaCount.Col - 1 _
-)
+Set BottomRightCell = Sheet.Cells.SpecialCells(xlCellTypeLastCell)
 
-Set BottomRightCell = Sheet.Cells( _
-    DataRectangle.End.Row, _
-    DataRectangle.Start.Col - 1 _
-)
+' This values will be redefined
+' "Íî ýòî íå òî÷íî"
+DataRectangle.BottomRight.Row = BottomRightCell.Row
+DataRectangle.BottomRight.Col = BottomRightCell.column
 
-Set Left = Range(TopLeftCell, BottomRightCell)
+FormulaRectangleHead.BottomRight.Col = BottomRightCell.column
+FormulaRectangleLeft.BottomRight.Row = BottomRightCell.Row
 
-Set FormulaRange = Application.Union(Head, Left)
-End Function
+Col = DataRectangle.TopLeft.Col     '<=== CONST
 
-Public Property Let FirstDataCell(FirstDataCell As Range)
-Dim LastCell As Range
+For Row = DataRectangle.TopLeft.Row To 1 Step -1
+    Set TheCell = Sheet.Cells(Row, Col)
+    If isValidEPMFormula(TheCell.Formula) Then
+        Exit For
+    End If
+Next
 
-Set Sheet = FirstDataCell.Worksheet
-Set LastCell = Sheet.Cells.SpecialCells(xlLastCell)
+FormulaRectangleHead.BottomRight.Row = Row
 
-DataRectangle.Start.Row = FirstDataCell.Row
-DataRectangle.Start.Col = FirstDataCell.column
-Call CalcPivotTableLength(LastCell)
-CalcOLAPFormulaInner
+For Row = Row To 1 Step -1
+    Set TheCell = Sheet.Cells(Row, Col)
+    If isValidEPMFormula(TheCell.Formula) Then
+        FormulaRectangleHead.TopLeft.Row = Row
+    End If
+Next
+
+Row = DataRectangle.TopLeft.Row     '<=== CONST
+
+For Col = DataRectangle.TopLeft.Col To 1 Step -1
+    Set TheCell = Sheet.Cells(Row, Col)
+    If isValidEPMFormula(TheCell.Formula) Then
+        Exit For
+    End If
+Next
+
+FormulaRectangleLeft.BottomRight.Col = Col
+
+For Col = Col To 1 Step -1
+    Set TheCell = Sheet.Cells(Row, Col)
+    If isValidEPMFormula(TheCell.Formula) Then
+        FormulaRectangleLeft.TopLeft.Col = Col
+    End If
+Next
+
+Row = FormulaRectangleHead.BottomRight.Row      '<=== CONST
+
+For Col = FormulaRectangleHead.TopLeft.Col To FormulaRectangleHead.BottomRight.Col
+    Set TheCell = Sheet.Cells(Row, Col)
+    If isValidEPMFormula(TheCell.Formula) Then
+        DataRectangle.BottomRight.Col = Col
+    End If
+Next
+
+FormulaRectangleHead.BottomRight.Col = DataRectangle.BottomRight.Col
+
+Col = FormulaRectangleLeft.BottomRight.Col      '<=== CONST
+
+For Row = FormulaRectangleLeft.TopLeft.Row To FormulaRectangleLeft.BottomRight.Row
+    Set TheCell = Sheet.Cells(Row, Col)
+    If isValidEPMFormula(TheCell.Formula) Then
+        DataRectangle.BottomRight.Row = Row
+    End If
+Next
+
+FormulaRectangleLeft.BottomRight.Row = DataRectangle.BottomRight.Row
+
+'Set BottomRightCell = Rectangle2Area(FormulaRectangleHead)
+'BottomRightCell.Select
+
+'Set BottomRightCell = Rectangle2Area(FormulaRectangleLeft)
+'BottomRightCell.Select
+
+'Set BottomRightCell = Rectangle2Area(DataRectangle)
+'BottomRightCell.Select
 End Property
 
-Public Property Get FirstDataCell() As Range
-Set FirstDataCell = Sheet.Cells( _
-    DataRectangle.Start.Row, _
-    DataRectangle.Start.Col _
+Public Property Get TopLeftDataCell() As Range
+Set TopLeftDataCell = Sheet.Cells( _
+    DataRectangle.TopLeft.Row, _
+    DataRectangle.TopLeft.Col _
 )
 End Property
 
-Public Property Let InnerDataRange(DataRange As Range)
-'FIXME: Maybe works INCORRECTLY!
-Dim LastCell As Range
+Public Property Let InnerDataRange(DataRange As Range)  'FIXME: NOT TESTED
+Dim TopLeftCell As Range
+Dim BottomRightCell As Range
+Dim Row, Col As Integer
 
 Set Sheet = DataRange.Worksheet
-Set LastCell = DataRange.SpecialCells(xlLastCell)
 
-DataRectangle.Start.Row = DataRange.Cells(1, 1).Row
-DataRectangle.Start.Col = DataRange.Cells(1, 1).column
-DataRectangle.End.Row = LastCell.Row
-DataRectangle.End.Col = LastCell.column
 
-CalcOLAPFormulaInner
+Set TopLeftCell = DataRange.Cells(1, 1)
+Set BottomRightCell = DataRange.Cells.SpecialCells(xlCellTypeLastCell)
+
+DataRectangle.TopLeft.Col = TopLeftCell.column
+DataRectangle.TopLeft.Row = TopLeftCell.Row
+DataRectangle.BottomRight.Col = BottomRightCell.column
+DataRectangle.BottomRight.Row = BottomRightCell.Row
+
+'Head
+FormulaRectangleHead.TopLeft.Col = DataRectangle.TopLeft.Col
+FormulaRectangleHead.BottomRight.Col = DataRectangle.BottomRight.Col
+
+'Left
+FormulaRectangleLeft.TopLeft.Row = DataRectangle.TopLeft.Row
+FormulaRectangleLeft.BottomRight.Row = DataRectangle.BottomRight.Row
+
+Col = DataRectangle.TopLeft.Col     '<=== CONST
+
+For Row = DataRectangle.TopLeft.Row To 1 Step -1
+    Set TheCell = Sheet.Cells(Row, Col)
+    If isValidEPMFormula(TheCell.Formula) Then
+        Exit For
+    End If
+Next
+
+FormulaRectangleHead.BottomRight.Row = Row
+
+For Row = Row To 1 Step -1
+    Set TheCell = Sheet.Cells(Row, Col)
+    If isValidEPMFormula(TheCell.Formula) Then
+        FormulaRectangleHead.TopLeft.Row = Row
+    End If
+Next
+
+Row = DataRectangle.TopLeft.Row     '<=== CONST
+
+For Col = DataRectangle.TopLeft.Col To 1 Step -1
+    Set TheCell = Sheet.Cells(Row, Col)
+    If isValidEPMFormula(TheCell.Formula) Then
+        Exit For
+    End If
+Next
+
+FormulaRectangleLeft.BottomRight.Col = Col
+
+For Col = Col To 1 Step -1
+    Set TheCell = Sheet.Cells(Row, Col)
+    If isValidEPMFormula(TheCell.Formula) Then
+        FormulaRectangleLeft.TopLeft.Col = Col
+    End If
+Next
 End Property
 
 Public Property Get InnerDataRange() As Range
-Dim TopLeftCell As Range
-Dim BottomRightCell As Range
-
-Set TopLeftCell = Sheet.Cells( _
-    DataRectangle.Start.Row, _
-    DataRectangle.Start.Col _
-)
-
-Set BottomRightCell = Sheet.Cells( _
-    DataRectangle.End.Row, _
-    DataRectangle.End.Col _
-)
-
-Set InnerDataRange = Range(TopLeftCell, BottomRightCell)
+Set InnerDataRange = Rectangle2Area(DataRectangle)
 End Property
 
-Public Property Let OuterTableRange(TableRange As Range)
-'FIXME: Works ugly.
+'Public Property Let OuterTableRange(TableRange As Range)
+'End Property
 
-Dim LastCell As Range
+'Public Property Get OuterDataRange() As Range
+'End Property
 
-Dim RangeAddress As String
-Dim Matches As Object
+Public Property Get Dictionary() As Scripting.Dictionary
+Set Dictionary = New Scripting.Dictionary
 
-Dim StartRangeCell As TCell
-Dim EndRangeCell As TCell
+Dictionary.Add _
+    Key:="Head", _
+    Item:=Rectangle2Area(FormulaRectangleHead)
 
-Set Sheet = TableRange.Worksheet
+Dictionary.Add _
+    Key:="Left", _
+    Item:=Rectangle2Area(FormulaRectangleLeft)
 
-RangeAddress = TableRange.Address(ReferenceStyle:=xlR1C1)
-
-Set Matches = R1C1RegEx.Execute(RangeAddress)
-
-If Matches.Count <> 1 Then
-    Err.Raise _
-        Number:=12345, _
-        Description:="Range Address """ & RangeAddress & """ looks invalid"
-End If
-
-Set Matches = Matches.Item(0).SubMatches
-
-If Matches.Count <> 4 Then
-    Err.Raise _
-        Number:=12345, _
-        Description:="Range Address """ & RangeAddress & """ looks invalid"
-End If
-
-StartRangeCell.Row = Matches.Item(0)
-StartRangeCell.Col = Matches.Item(1)
-
-DataRectangle.End.Row = Matches.Item(2)
-DataRectangle.End.Col = Matches.Item(3)
-
-Set LastCell = Sheet.Cells( _
-    DataRectangle.End.Row, _
-    DataRectangle.End.Col _
-)
-
-Call CalcOLAPFormulaOuter(TableRange.Cells(1, 1), LastCell)
+Dictionary.Add _
+    Key:="Data", _
+    Item:=Rectangle2Area(DataRectangle)
 End Property
 
-Public Property Get OuterDataRange() As Range
-Dim TopLeftCell As Range
-Dim BottomRightCell As Range
+Public Property Let Dictionary(NewVal As Scripting.Dictionary)
+Dim DataRange As Range
 
-Set TopLeftCell = Sheet.Cells( _
-    DataRectangle.Start.Row - FormulaCount.Row, _
-    DataRectangle.Start.Col - FormulaCount.Col _
-)
+Set DataRange = NewVal.Item("Data")
 
-Set BottomRightCell = Sheet.Cells( _
-    DataRectangle.End.Row, _
-    DataRectangle.End.Col _
-)
+Set Sheet = DataRange.Worksheet
 
-Set InnerDataRange = Range(TopLeftCell, BottomRightCell)
+FormulaRectangleHead = Area2Rectangle(NewVal.Item("Head"))
+FormulaRectangleLeft = Area2Rectangle(NewVal.Item("Left"))
+
+DataRectangle = Area2Rectangle(DataRange)
 End Property
 
 Public Property Get PivotTable() As PivotTable
@@ -225,26 +337,36 @@ ScanTable
 Set PivotTable = TargetTable
 End Property
 
-Public Function ParseEPMOlapFormula(line As String) As Object
-Dim Matches As Object
-Dim MatchItems As Object
+Public Function ParseEPMFormula( _
+    FormulaName As Variant, _
+    line As String _
+) As Object
 
-Set Matches = EPMMemberOParser("Olap").Execute(line)
+Dim Matches As Object
+
+If Not EPMMemberOParser.Exists(FormulaName) Then
+    Err.Raise _
+        Number:=12345, _
+        Description:="EPM Formula """ & _
+        FormulaName & """ does not exists."
+End If
+
+Set Matches = EPMMemberOParser.Item(FormulaName).Execute(line)
 
 If Matches.Count = 0 Then
     Exit Function
 End If
 
-Set ParseEPMOlapFormula = Matches.Item(0).SubMatches
+Set ParseEPMFormula = Matches.Item(0).SubMatches
 End Function
 
 Public Function isValidEPMFormula(line As String) As Boolean
-Dim key As Variant
+Dim Key As Variant
 Dim CurrentRegEx As RegExp
 
-For Each key In EPMMemberOParser.Keys
-    Set CurrentRegEx = EPMMemberOParser(key)
-    isValidEPMFormula = CurrentRegEx.Test(line)
+For Each Key In EPMMemberOParser.Keys
+    Set CurrentRegEx = EPMMemberOParser(Key)
+    isValidEPMFormula = CurrentRegEx.test(line)
     If isValidEPMFormula Then
         Exit Function
     End If
@@ -254,30 +376,19 @@ End Function
 '==================== PRIVATE METHODS ===================
 
 Private Sub Class_Initialize()
-Dim EPMRegEx As RegExp
 Dim Patterns As Scripting.Dictionary
-Dim PatternName As Variant
 
 Set EPMMemberOParser = New Scripting.Dictionary
-Set Patterns = New Scripting.Dictionary
 
-Patterns.Add key:="Local", Item:="EPMLocalMember(O){0,1}\("""
-Patterns.Add key:="Blank", Item:="EPMOlapMemberO\(""\[Blank Member\]"""
-
-For Each PatternName In Patterns.Keys
-    Set EPMRegEx = New RegExp
-    EPMRegEx.Pattern = Patterns(PatternName)
-    EPMRegEx.IgnoreCase = False
-    
-    EPMMemberOParser.Add _
-        key:=PatternName, _
-        Item:=EPMRegEx
-Next
-
-SetEPMOLAPMemberParser
+ConfigureEPMBlankMember
+ConfigureEPMLocalMember
+ConfigureEPMOLAPMember
 
 Set R1C1RegEx = New RegExp
-R1C1RegEx.Pattern = "R(\d+)C(\d+):R(\d+)C(\d+)"
+
+R1C1RegEx.Pattern = "R(\d+)C(\d+)\:R(\d+)C(\d+)"
+R1C1RegEx.Global = True
+R1C1RegEx.IgnoreCase = False
 
 End Sub
 
@@ -286,258 +397,47 @@ Private Sub Class_Terminate()
     Set Sheet = Nothing
 End Sub
 
-'==== Здесь и далее идут костыли ====
-'==== Перепишу, как совсем допечет. Работает -- и ладно :)
+Private Function Rectangle2Area(ThisRectangle As TRectangle) As Range
+Dim TopLeftCell As Range
+Dim BottomRightCell As Range
 
-Private Function ScanTableByCols() As Integer
-Dim _
-    StartFormulaRow, _
-    EndFormulaRow, _
-    FormulaRow _
-As Integer
-Dim ThisRange As Range
-Dim ThisFormulaCell As Range
-Dim EPMOlapMember As Object
+Set TopLeftCell = Sheet.Cells( _
+    ThisRectangle.TopLeft.Row, _
+    ThisRectangle.TopLeft.Col _
+)
 
-StartFormulaRow = DataRectangle.Start.Row - 1
-EndFormulaRow = DataRectangle.Start.Row - FormulaCount.Row
+Set BottomRightCell = Sheet.Cells( _
+    ThisRectangle.BottomRight.Row, _
+    ThisRectangle.BottomRight.Col _
+)
 
-For ScanTableByCols = DataRectangle.Start.Col To DataRectangle.End.Col
-    Set ThisRange = Range( _
-        Sheet.Cells(DataRectangle.Start.Row, ScanTableByCols), _
-        Sheet.Cells(DataRectangle.End.Row, ScanTableByCols) _
-    )
-
-    For FormulaRow = StartFormulaRow To EndFormulaRow Step -1
-        Set ThisFormulaCell = Sheet.Cells(FormulaRow, ScanTableByCols)
-        
-        Set EPMOlapMember = ParseEPMOlapFormula(ThisFormulaCell.formula)
-        If Not EPMOlapMember Is Nothing Then
-            TargetTable.Add _
-                DimensionName:=EPMOlapMember.Item(0), _
-                MemberID:=EPMOlapMember.Item(2), _
-                ItemRange:=ThisRange
-        End If
-    Next FormulaRow
-Next ScanTableByCols
-
-ScanTableByCols = ScanTableByCols - 1
+Set Rectangle2Area = Range(TopLeftCell, BottomRightCell)
 End Function
 
-Private Function ScanTableByRows() As Integer
-Dim _
-    StartFormulaCol, _
-    EndFormulaCol, _
-    FormulaCol _
-As Integer
-Dim ThisRange As Range
-Dim ThisFormulaCell As Range
-Dim EPMOlapMember As Object
+Private Function Area2Rectangle(ThisArea As Range) As TRectangle
+Dim Matches As Object
 
-StartFormulaCol = DataRectangle.Start.Col - 1
-EndFormulaCol = DataRectangle.Start.Col - FormulaCount.Col
+If Not ThisArea.Areas.Count = 1 Then
+    Err.Raise _
+        Number:=12345, _
+        Description:="Only monolitic area can be converted to TRectangle unambigously"
+End If
 
-For ScanTableByRows = DataRectangle.Start.Row To DataRectangle.End.Row
-    Set ThisRange = Range( _
-        Sheet.Cells(ScanTableByRows, DataRectangle.Start.Col), _
-        Sheet.Cells(ScanTableByRows, DataRectangle.End.Col) _
-    )
+Set Matches = R1C1RegEx.Execute( _
+    ThisArea.Address(ReferenceStyle:=xlR1C1) _
+)
 
-    For FormulaCol = StartFormulaCol To EndFormulaCol Step -1
-        Set ThisFormulaCell = Sheet.Cells(ScanTableByRows, FormulaCol)
-        
-        Set EPMOlapMember = ParseEPMOlapFormula(ThisFormulaCell.formula)
-        If Not EPMOlapMember Is Nothing Then
-            TargetTable.Add _
-                DimensionName:=EPMOlapMember.Item(0), _
-                MemberID:=EPMOlapMember.Item(2), _
-                ItemRange:=ThisRange
-        End If
-    Next FormulaCol
-Next ScanTableByRows
+If Not Matches.Count = 1 Then
+    Err.Raise _
+        Number:=12345, _
+        Description:="Invalid area R1C1 address. This exception could not occured"
+End If
 
-ScanTableByRows = ScanTableByRows - 1
+Set Matches = Matches.Item(0).SubMatches
+
+Area2Rectangle.TopLeft.Row = CInt(Matches.Item(0))
+Area2Rectangle.TopLeft.Col = CInt(Matches.Item(1))
+Area2Rectangle.BottomRight.Row = CInt(Matches.Item(2))
+Area2Rectangle.BottomRight.Col = CInt(Matches.Item(3))
 End Function
-
-Private Sub ScanTable()
-'FIXME: Заменить порядок сканирования на Z-стратегию
-'(если это возможно)
-Call ScanTableByCols
-Call ScanTableByRows
-End Sub
-
-Private Sub CalcOLAPFormulaInnerLeft()
-Dim Col As Integer
-Dim ScanRow As Integer
-Dim CurrentCell As Range
-
-ScanRow = DataRectangle.Start.Row
-
-For Col = DataRectangle.Start.Col - 1 To 1 Step -1
-    Set CurrentCell = Sheet.Cells( _
-        ScanRow, _
-        Col _
-    )
-    
-    If Not isValidEPMFormula(CurrentCell.formula) Then
-        'CurrentCell.Select
-        Exit For
-    End If
-Next Col
-
-FormulaCount.Col = DataRectangle.Start.Col - Col - 1
-End Sub
-
-Private Sub CalcOLAPFormulaInnerHead()
-Dim Row As Integer
-Dim ScanCol As Integer
-Dim CurrentCell As Range
-
-ScanCol = DataRectangle.Start.Col
-
-For Row = DataRectangle.Start.Row - 1 To 1 Step -1
-    Set CurrentCell = Sheet.Cells( _
-        Row, _
-        ScanCol _
-    )
-    
-    If Not isValidEPMFormula(CurrentCell.formula) Then
-        'CurrentCell.Select
-        Exit For
-    End If
-Next Row
-
-FormulaCount.Row = DataRectangle.Start.Row - Row - 1
-End Sub
-
-Private Sub CalcOLAPFormulaInner()
-'V[e]+ry stupid scan method
-CalcOLAPFormulaInnerHead
-CalcOLAPFormulaInnerLeft
-End Sub
-
-Private Sub CalcOLAPFormulaOuterRight( _
-    FirstOuterCell As Range, _
-    LastCell As Range _
-)
-
-Dim Col As Integer
-Dim ScanRow As Integer
-Dim CurrentCell As Range
-
-ScanRow = FirstOuterCell.Row
-
-For Col = FirstOuterCell.column To LastCell.column
-    Set CurrentCell = Sheet.Cells( _
-        ScanRow, _
-        Col _
-    )
-    
-    If isValidEPMFormula(CurrentCell.formula) Then
-        'CurrentCell.Select
-        Exit For
-    End If
-Next Col
-
-DataRectangle.Start.Col = Col
-FormulaCount.Col = Col - FirstOuterCell.column
-End Sub
-
-Private Sub CalcOLAPFormulaOuterBottom( _
-    FirstOuterCell As Range, _
-    LastCell As Range _
-)
-
-Dim Row As Integer
-Dim ScanCol As Integer
-Dim CurrentCell As Range
-
-ScanCol = FirstOuterCell.column
-
-For Row = FirstOuterCell.Row To LastCell.Row
-    Set CurrentCell = Sheet.Cells( _
-        Row, _
-        ScanCol _
-    )
-    
-    If isValidEPMFormula(CurrentCell.formula) Then
-        'CurrentCell.Select
-        Exit For
-    End If
-Next Row
-
-DataRectangle.Start.Row = Row
-FormulaCount.Row = Row - FirstOuterCell.Row
-End Sub
-
-Private Sub CalcOLAPFormulaOuter( _
-    FirstOuterCell As Range, _
-    LastCell As Range _
-)
-
-'V[e]+ry stupid scan method
-'FirstOuterCell.Select
-Call CalcOLAPFormulaOuterRight(FirstOuterCell, LastCell)
-Call CalcOLAPFormulaOuterBottom(FirstOuterCell, LastCell)
-End Sub
-
-Private Sub CalcPivotTableLengthRight(LastCell As Range)
-Dim Col As Integer
-Dim ScanRow As Integer
-Dim CurrentCell As Range
-
-If DataRectangle.Start.Row = 1 Then
-    DataRectangle.End.Col = DataRectangle.Start.Col
-    Exit Sub
-End If
-
-ScanRow = DataRectangle.Start.Row - 1
-
-For Col = DataRectangle.Start.Col To LastCell.column
-    Set CurrentCell = Sheet.Cells( _
-        ScanRow, _
-        Col _
-    )
-    
-    If Not isValidEPMFormula(CurrentCell.formula) Then
-        'CurrentCell.Select
-        Exit For
-    End If
-Next Col
-
-DataRectangle.End.Col = Col - 1
-
-End Sub
-
-Private Sub CalcPivotTableLengthBottom(LastCell As Range)
-Dim Row As Integer
-Dim ScanCol As Integer
-Dim CurrentCell As Range
-
-If DataRectangle.Start.Col = 1 Then
-    DataRectangle.End.Row = DataRectangle.Start.Row
-    Exit Sub
-End If
-
-ScanCol = DataRectangle.Start.Col - 1
-
-For Row = DataRectangle.Start.Row To LastCell.Row
-    Set CurrentCell = Sheet.Cells( _
-        Row, _
-        ScanCol _
-    )
-    If Not isValidEPMFormula(CurrentCell.formula) Then
-        'CurrentCell.Select
-        Exit For
-    End If
-Next Row
-
-DataRectangle.End.Row = Row - 1
-
-End Sub
-
-Private Sub CalcPivotTableLength(LastCell As Range)
-'V[e]+ry stupid scan method
-Call CalcPivotTableLengthRight(LastCell)
-Call CalcPivotTableLengthBottom(LastCell)
-End Sub
+                                                        
